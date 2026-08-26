@@ -251,9 +251,37 @@ PAGES.detalle = el=>{
   $("#f-d-marca").onchange=render;$("#f-d-fecha").onchange=render;render();
 };
 
-const gapCols=[["marca_mas_barata","Más barata"],["precio_mas_barato","Precio",1],["marca_mas_cara","Más cara"],["precio_mas_caro","Precio",1],["diferencia_pesos","Dif $",1],["diferencia_pct","Dif %",2],["temporada","Temp."],["marca_producto","Marca prod."]];
-PAGES.precios = el=>{el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">Mismo SKU en oferta en dos marcas, a distinto precio.</div></div><div class="controls"><input type="search" id="s-precios" placeholder="Buscar SKU o producto…"></div><div id="t-precios"></div>`;tableSearch(DATA.precio_especial_distinto||[],gapCols,"#t-precios","#s-precios","✓ Sin diferencias detectadas");};
-PAGES.full = el=>{el.innerHTML=`<div class="h"><h2 class="serif">Precio full distinto</h2><div class="desc">Mismo SKU con precio full distinto entre marcas.</div></div><div class="controls"><input type="search" id="s-full" placeholder="Buscar SKU o producto…"></div><div id="t-full"></div>`;tableSearch(DATA.precio_full_distinto||[],gapCols,"#t-full","#s-full","✓ Sin diferencias detectadas");};
+// tabla apilada agrupada por SKU (una fila por marca, con precio y % por marca)
+function stackedTable(rowsAll, priceKey, extraCols, mount, searchId, emptyMsg){
+  const draw=q=>{
+    const rows = rowsAll.filter(r=>!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q.toLowerCase()));
+    if(!rows.length){ $(mount).innerHTML=`<div class="ok">${emptyMsg}</div>`; return; }
+    // agrupar por sku conservando el orden
+    const groups=[]; const seen={};
+    rows.forEach(r=>{ if(!(r.sku in seen)){seen[r.sku]=groups.length; groups.push({sku:r.sku, nombre:r.nombre_producto, rows:[]});} groups[seen[r.sku]].rows.push(r); });
+    const head = `<tr><th>SKU</th><th>Producto</th><th>Marca</th><th class="r">${priceKey==='precio_especial'?'Precio especial':'Precio full'}</th>${extraCols.map(c=>`<th class="r">${c[1]}</th>`).join("")}<th></th></tr>`;
+    const body = groups.map(g=> g.rows.map((r,i)=>{
+      const first=i===0, barato=num(r.sobreprecio_pct)===0 && g.rows.length>1;
+      const tag = barato?'<span class="badge b-si">más barato</span>':'';
+      return `<tr${first?' style="border-top:2px solid var(--line)"':''}>`
+        + (first?`<td class="sku" rowspan="${g.rows.length}" style="vertical-align:top">${g.sku}</td><td rowspan="${g.rows.length}" style="vertical-align:top">${g.nombre||""}</td>`:'')
+        + `<td${barato?' style="font-weight:600;color:var(--rose-d)"':''}>${r.marca||""}</td>`
+        + `<td class="r mono">${clp(num(r[priceKey]))}</td>`
+        + extraCols.map(c=>`<td class="r mono">${c[2]==='pct'?num(r[c[0]])+'%':(r[c[0]]||'')}</td>`).join("")
+        + `<td>${tag}</td></tr>`;
+    }).join("")).join("");
+    $(mount).innerHTML=`<div class="tablewrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="rowcount">${groups.length} SKU con diferencias · ${rows.length} filas</div>`;
+  };
+  draw(""); const s=$(searchId); if(s) s.oninput=()=>draw(s.value);
+}
+PAGES.full = el=>{
+  el.innerHTML=`<div class="h"><h2 class="serif">Precio full distinto</h2><div class="desc">SKUs cuyo precio full no es igual en todos los feeds donde están. Cada fila es una marca; el más barato queda destacado.</div></div><div class="controls"><input type="search" id="s-full" placeholder="Buscar SKU o producto…"></div><div id="t-full"></div>`;
+  stackedTable(DATA.precio_full_distinto||[], "precio_full", [["sobreprecio_pct","Sobre +","pct"],["temporada","Temp."],["marca_producto","Marca prod."]], "#t-full", "#s-full", "✓ Sin diferencias de precio full entre feeds");
+};
+PAGES.precios = el=>{
+  el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">SKUs con precio especial distinto entre feeds. Cada fila muestra la marca, su precio de oferta y su % de descuento.</div></div><div class="controls"><input type="search" id="s-precios" placeholder="Buscar SKU o producto…"></div><div id="t-precios"></div>`;
+  stackedTable(DATA.precio_especial_distinto||[], "precio_especial", [["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp."],["marca_producto","Marca prod."]], "#t-precios", "#s-precios", "✓ Sin diferencias de precio especial entre feeds");
+};
 PAGES.oferta = el=>{
   const cols=[["marca_en_oferta","En oferta"],["precio_oferta","Precio oferta",1],["marca_precio_full","A precio full"],["precio_full","Precio full",1],["diferencia_pesos","Dif $",1],["diferencia_pct","Dif %",2],["temporada","Temp."]];
   el.innerHTML=`<div class="h"><h2 class="serif">Oferta inconsistente</h2><div class="desc">SKU en oferta en una marca y a precio full en otra.</div></div><div class="controls"><input type="search" id="s-oferta" placeholder="Buscar SKU o producto…"></div><div id="t-oferta"></div>`;
