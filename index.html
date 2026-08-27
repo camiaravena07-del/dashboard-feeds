@@ -78,6 +78,8 @@
   .b-promo{background:#F3E9F7;color:#7E4E9C}
   .tablewrap{max-height:600px;overflow:auto;border-radius:12px;border:1px solid var(--line)}
   .rowcount{font:400 12px/1 'DM Sans';color:var(--faint);margin-top:10px}
+  .btn{font:500 12px/1 'DM Sans';color:var(--rose-d);background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:8px 13px;cursor:pointer;transition:background .12s}
+  .btn:hover{background:var(--chip-bg)}
   .empty{padding:40px;text-align:center;color:var(--muted)}
   .ok{padding:30px;text-align:center;color:var(--green);font:500 15px/1.4 'DM Sans'}
   .loading{padding:80px;text-align:center;color:var(--muted)}
@@ -253,70 +255,116 @@ PAGES.detalle = el=>{
   $("#f-d-marca").onchange=render;$("#f-d-fecha").onchange=render;render();
 };
 
-// tabla apilada agrupada por SKU, con columnas configurables y filtro por feed
-function stackedTable(rowsAll, valueCols, mount, searchId, emptyMsg, feedSelId){
-  const fmtCell = (r,c)=>{
-    const v=r[c[0]];
+// descarga CSV (separador ; + BOM para Excel es-CL)
+function toCSV(rows){
+  if(!rows.length) return "";
+  const cols=Object.keys(rows[0]);
+  const esc=v=>{v=v==null?"":String(v); return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  return cols.join(";")+"\n"+rows.map(r=>cols.map(c=>esc(r[c])).join(";")).join("\n");
+}
+function downloadCSV(name,rows){
+  const blob=new Blob(["\ufeff"+toCSV(rows)],{type:"text/csv;charset=utf-8;"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+// tabla apilada por SKU con filtros de feed + temporada + búsqueda + descarga
+function stackedTable(rowsAll, valueCols, mount, ids, emptyMsg){
+  const fmtCell=(r,c)=>{const v=r[c[0]];
     if(c[2]==="clp") return `<td class="r mono">${clp(num(v))}</td>`;
     if(c[2]==="pct") return `<td class="r mono">${num(v)}%</td>`;
     if(c[2]==="badge") return `<td>${v==="Si"?'<span class="badge b-si">En oferta</span>':'<span class="badge b-no">Sin oferta</span>'}</td>`;
-    return `<td>${v||""}</td>`;
-  };
+    return `<td>${v||""}</td>`;};
+  let current=rowsAll;
   const draw=()=>{
-    const feed = feedSelId && $(feedSelId) ? $(feedSelId).value : "Todos los feeds";
-    const q = searchId && $(searchId) ? ($(searchId).value||"").toLowerCase() : "";
-    let rows = rowsAll;
-    if(feed!=="Todos los feeds"){
-      const skus = new Set(rows.filter(r=>r.marca===feed).map(r=>r.sku));
-      rows = rows.filter(r=>skus.has(r.sku));
-    }
-    if(q) rows = rows.filter(r=>((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q));
+    const feed=ids.feed&&$(ids.feed)?$(ids.feed).value:"Todos los feeds";
+    const temp=ids.temp&&$(ids.temp)?$(ids.temp).value:"Todas";
+    const q=ids.search&&$(ids.search)?($(ids.search).value||"").toLowerCase():"";
+    let rows=rowsAll;
+    if(feed!=="Todos los feeds"){const s=new Set(rows.filter(r=>r.marca===feed).map(r=>r.sku)); rows=rows.filter(r=>s.has(r.sku));}
+    if(temp!=="Todas"){const s=new Set(rows.filter(r=>r.temporada===temp).map(r=>r.sku)); rows=rows.filter(r=>s.has(r.sku));}
+    if(q) rows=rows.filter(r=>((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q));
+    current=rows;
     if(!rows.length){ $(mount).innerHTML=`<div class="ok">${emptyMsg}</div>`; return; }
     const groups=[]; const seen={};
     rows.forEach(r=>{ if(!(r.sku in seen)){seen[r.sku]=groups.length; groups.push({sku:r.sku,nombre:r.nombre_producto,rows:[]});} groups[seen[r.sku]].rows.push(r); });
-    const head = `<tr><th>SKU</th><th>Producto</th><th>Feed</th>${valueCols.map(c=>`<th class="${c[2]==='clp'||c[2]==='pct'?'r':''}">${c[1]}</th>`).join("")}<th></th></tr>`;
-    const body = groups.map(g=> g.rows.map((r,i)=>{
-      const first=i===0, barato=("sobreprecio_pct" in r) && num(r.sobreprecio_pct)===0 && g.rows.length>1;
+    const head=`<tr><th>SKU</th><th>Producto</th><th>Feed</th>${valueCols.map(c=>`<th class="${c[2]==='clp'||c[2]==='pct'?'r':''}">${c[1]}</th>`).join("")}<th></th></tr>`;
+    const body=groups.map(g=>g.rows.map((r,i)=>{
+      const first=i===0, barato=("sobreprecio_pct" in r)&&num(r.sobreprecio_pct)===0&&g.rows.length>1;
       return `<tr${first?' style="border-top:2px solid var(--line)"':''}>`
-        + (first?`<td class="sku" rowspan="${g.rows.length}" style="vertical-align:top">${g.sku}</td><td rowspan="${g.rows.length}" style="vertical-align:top">${g.nombre||""}</td>`:'')
-        + `<td${barato?' style="font-weight:600;color:var(--rose-d)"':''}>${r.marca||""}</td>`
-        + valueCols.map(c=>fmtCell(r,c)).join("")
-        + `<td>${barato?'<span class="badge b-si">más barato</span>':''}</td></tr>`;
+        +(first?`<td class="sku" rowspan="${g.rows.length}" style="vertical-align:top">${g.sku}</td><td rowspan="${g.rows.length}" style="vertical-align:top">${g.nombre||""}</td>`:'')
+        +`<td${barato?' style="font-weight:600;color:var(--rose-d)"':''}>${r.marca||""}</td>`
+        +valueCols.map(c=>fmtCell(r,c)).join("")
+        +`<td>${barato?'<span class="badge b-si">más barato</span>':''}</td></tr>`;
     }).join("")).join("");
     $(mount).innerHTML=`<div class="tablewrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="rowcount">${groups.length} SKU · ${rows.length} filas</div>`;
   };
   draw();
-  if(searchId&&$(searchId)) $(searchId).oninput=draw;
-  if(feedSelId&&$(feedSelId)) $(feedSelId).onchange=draw;
+  if(ids.feed&&$(ids.feed)) $(ids.feed).onchange=draw;
+  if(ids.temp&&$(ids.temp)) $(ids.temp).onchange=draw;
+  if(ids.search&&$(ids.search)) $(ids.search).oninput=draw;
+  if(ids.dl&&$(ids.dl)) $(ids.dl).onclick=()=>downloadCSV(ids.dlname||"tabla.csv", current);
 }
-const feedControl = ()=>`<span class="lab">Feed</span><select id="__feedsel"><option>Todos los feeds</option>${opts(marcas())}</select>`;
+const priceControls = (pfx,rows)=>`
+  <span class="lab">Feed</span><select id="${pfx}-feed"><option>Todos los feeds</option>${opts(marcas())}</select>
+  <span class="lab">Temporada</span><select id="${pfx}-temp"><option>Todas</option>${opts(uniq(rows.map(r=>r.temporada)).sort())}</select>
+  <input type="search" id="${pfx}-s" placeholder="Buscar SKU o producto…">
+  <button class="btn" id="${pfx}-dl">Descargar CSV</button>`;
 
 PAGES.full = el=>{
-  el.innerHTML=`<div class="h"><h2 class="serif">Precio full distinto</h2><div class="desc">SKUs cuyo precio full no es igual en todos los feeds donde están. El más barato queda destacado.</div></div><div class="controls">${feedControl()}<input type="search" id="s-full" placeholder="Buscar SKU o producto…"></div><div id="t-full"></div>`;
-  stackedTable(DATA.precio_full_distinto||[], [["precio_full","Precio full","clp"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-full", "#s-full", "✓ Sin diferencias de precio full entre feeds", "#__feedsel");
+  const rows=DATA.precio_full_distinto||[];
+  el.innerHTML=`<div class="h"><h2 class="serif">Precio full distinto</h2><div class="desc">SKUs cuyo precio full no es igual en todos los feeds donde están. El más barato queda destacado.</div></div><div class="controls">${priceControls("ff",rows)}</div><div id="t-full"></div>`;
+  stackedTable(rows, [["precio_full","Precio full","clp"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-full", {feed:"#ff-feed",temp:"#ff-temp",search:"#ff-s",dl:"#ff-dl",dlname:"precio_full_distinto.csv"}, "✓ Sin diferencias de precio full entre feeds");
 };
 PAGES.precios = el=>{
-  el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">SKUs con precio especial distinto entre feeds. Cada fila muestra el feed, su precio de oferta y su % de descuento.</div></div><div class="controls">${feedControl()}<input type="search" id="s-precios" placeholder="Buscar SKU o producto…"></div><div id="t-precios"></div>`;
-  stackedTable(DATA.precio_especial_distinto||[], [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-precios", "#s-precios", "✓ Sin diferencias de precio especial entre feeds", "#__feedsel");
+  const rows=DATA.precio_especial_distinto||[];
+  el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">SKUs con precio especial distinto entre feeds. Cada fila muestra el feed, su precio de oferta y su % de descuento.</div></div><div class="controls">${priceControls("fp",rows)}</div><div id="t-precios"></div>`;
+  stackedTable(rows, [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-precios", {feed:"#fp-feed",temp:"#fp-temp",search:"#fp-s",dl:"#fp-dl",dlname:"precio_especial_distinto.csv"}, "✓ Sin diferencias de precio especial entre feeds");
 };
 PAGES.oferta = el=>{
-  el.innerHTML=`<div class="h"><h2 class="serif">Oferta inconsistente</h2><div class="desc">SKUs con precio especial en algún feed pero no en otro. Cada fila muestra el feed y si el producto está o no en oferta.</div></div><div class="controls">${feedControl()}<input type="search" id="s-oferta" placeholder="Buscar SKU o producto…"></div><div id="t-oferta"></div>`;
-  stackedTable(DATA.oferta_inconsistente||[], [["en_oferta","Estado","badge"],["precio","Precio","clp"],["descuento_pct","Desc.","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-oferta", "#s-oferta", "✓ Sin ofertas inconsistentes", "#__feedsel");
+  const rows=DATA.oferta_inconsistente||[];
+  el.innerHTML=`<div class="h"><h2 class="serif">Oferta inconsistente</h2><div class="desc">SKUs con precio especial en algún feed pero no en otro. Cada fila muestra el feed y si el producto está o no en oferta.</div></div><div class="controls">${priceControls("fo",rows)}</div><div id="t-oferta"></div>`;
+  stackedTable(rows, [["en_oferta","Estado","badge"],["precio","Precio","clp"],["descuento_pct","Desc.","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-oferta", {feed:"#fo-feed",temp:"#fo-temp",search:"#fo-s",dl:"#fo-dl",dlname:"oferta_inconsistente.csv"}, "✓ Sin ofertas inconsistentes");
 };
 PAGES.gaps = el=>{
-  const rowsAll=DATA.gaps_detalle||[];
-  const feeds=uniq(rowsAll.map(r=>r.feed)).sort();
-  const temps=uniq(rowsAll.map(r=>r.temporada)).sort();
-  el.innerHTML=`<div class="h"><h2 class="serif">Cobertura de catálogo</h2><div class="desc">Productos que están creados en un feed pero faltan en el feed con el que deberían compartirse. Es bidireccional.</div></div>
+  const det=DATA.gaps_detalle||[], pres=DATA.gaps_presencia||[];
+  const feeds=uniq(det.map(r=>r.feed)).sort();
+  const temps=uniq(det.map(r=>r.temporada)).sort();
+  el.innerHTML=`<div class="h"><h2 class="serif">Cobertura de catálogo</h2><div class="desc">Elige un feed para ver qué productos deberían estar en él pero faltan (y en qué otros feeds sí están). La relación es bidireccional.</div></div>
     <div class="controls">
-      <span class="lab">Feed</span><select id="f-gaps"><option>Todos los feeds</option>${opts(feeds)}</select>
-      <span class="lab">Temporada</span><select id="f-gaps-t"><option>Todas</option>${opts(temps)}</select>
-      <input type="search" id="s-gaps" placeholder="Buscar SKU o producto…">
-    </div><div id="t-gaps"></div>`;
-  const draw=()=>{const feed=$("#f-gaps").value,t=$("#f-gaps-t").value,q=($("#s-gaps").value||"").toLowerCase();
-    const rows=rowsAll.filter(r=>(feed==="Todos los feeds"||r.feed===feed)&&(t==="Todas"||r.temporada===t)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
-    $("#t-gaps").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Falta en (feed)</th><th>Marca</th><th>SKU</th><th>Producto</th><th>Temp.</th><th>Oferta</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--rose-d)">${r.feed||""}</td><td>${r.marca||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.temporada||""}</td><td>${r.en_oferta==="Si"?'<span class="badge b-promo">En oferta</span>':""}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} productos faltantes</div>`:`<div class="ok">✓ Sin faltantes para este filtro</div>`;};
-  $("#f-gaps").onchange=draw;$("#f-gaps-t").onchange=draw;$("#s-gaps").oninput=draw;draw();
+      <span class="lab">Feed</span><select id="g-feed"><option>Todos los feeds</option>${opts(feeds)}</select>
+      <span class="lab">Temporada</span><select id="g-temp"><option>Todas</option>${opts(temps)}</select>
+      <input type="search" id="g-s" placeholder="Buscar SKU o producto…">
+      <button class="btn" id="g-dl">Descargar CSV</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+      <div class="card"><div class="label" style="margin-bottom:10px">Productos faltantes por temporada</div><div class="chart-box" style="height:260px"><canvas id="g-pie"></canvas></div></div>
+      <div class="card"><div class="label" style="margin-bottom:14px">Feeds donde sí están estos productos</div><div id="g-pres"></div></div>
+    </div>
+    <div id="g-det"></div>`;
+
+  const draw=()=>{
+    const feed=$("#g-feed").value, temp=$("#g-temp").value, q=($("#g-s").value||"").toLowerCase();
+    const okFeed=r=>feed==="Todos los feeds"||r.feed===feed;
+    let rows=det.filter(r=>okFeed(r)&&(temp==="Todas"||r.temporada===temp)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
+
+    // torta por temporada (respeta feed, no el filtro de temporada para no quedar en 1 slice)
+    const porTemp={}; det.filter(okFeed).forEach(r=>{const t=r.temporada||"(sin temp)"; porTemp[t]=(porTemp[t]||0)+1;});
+    const labels=Object.keys(porTemp), vals=labels.map(l=>porTemp[l]);
+    const cv=$("#g-pie"); if(cv._chart) cv._chart.destroy();
+    cv._chart=new Chart(cv,{type:"doughnut",data:{labels,datasets:[{data:vals,backgroundColor:PALETTE,borderColor:"#fff",borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"right",labels:{color:"#3B2C34",font:{size:11}}}}}});
+
+    // feeds donde SÍ están (presencia agregada)
+    const okP=r=>feed==="Todos los feeds"||r.feed_falta===feed;
+    const agg={}; pres.filter(okP).forEach(r=>{const f=r.feed_presente; if(!agg[f])agg[f]={sk:new Set(),u:0}; agg[f].sk.add(r.sku); agg[f].u+=num(r.unidades);});
+    const filas=Object.keys(agg).map(f=>[f,agg[f].sk.size,agg[f].u]).sort((a,b)=>b[1]-a[1]);
+    $("#g-pres").innerHTML=filas.length?`<table><thead><tr><th>Feed</th><th class="r">Productos</th><th class="r">Unidades</th></tr></thead><tbody>${filas.map(f=>`<tr><td>${f[0]}</td><td class="r mono">${f[1].toLocaleString("es-CL")}</td><td class="r mono">${f[2].toLocaleString("es-CL")}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">—</div>`;
+
+    // detalle
+    $("#g-det").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Falta en</th><th>Marca</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Temp.</th><th>Descuento</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--rose-d)">${r.feed||""}</td><td>${r.marca||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.pmax||""}</td><td>${r.temporada||""}</td><td>${r.en_oferta==="Si"?'<span class="badge b-promo">Con descuento</span>':'<span class="badge b-na">—</span>'}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} productos faltantes</div>`:`<div class="ok">✓ Sin faltantes para este filtro</div>`;
+    window.__gapsRows=rows;
+  };
+  $("#g-feed").onchange=draw; $("#g-temp").onchange=draw; $("#g-s").oninput=draw;
+  $("#g-dl").onclick=()=>downloadCSV("cobertura_faltantes.csv", window.__gapsRows||[]);
+  draw();
 };
 PAGES.val = el=>{
   const rowsAll=DATA.validacion_sale||[];
