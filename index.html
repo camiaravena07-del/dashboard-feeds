@@ -31,7 +31,6 @@
   .layout{display:flex;align-items:flex-start;min-height:100vh}
   aside{position:sticky;top:0;flex:0 0 234px;height:100vh;box-sizing:border-box;padding:32px 20px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:20px;overflow-y:auto}
   aside .brand{font:400 25px/1.1 'Instrument Serif',serif;color:var(--ink2);letter-spacing:.01em}
-  aside .brand::first-letter{color:var(--rose)}
   aside .sub{margin-top:6px}
   nav{display:flex;flex-direction:column;gap:2px}
   nav .sec{padding:10px 10px 4px;font:500 9.5px/1 'DM Sans';color:var(--faint2);letter-spacing:.12em;text-transform:uppercase}
@@ -175,7 +174,7 @@ function drawLine(canvasId,legendId,cfg){
   if(el._chart) el._chart.destroy();
   el._chart=new Chart(el,{type:"line",data:cfg,options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y.toLocaleString("es-CL")}`}}},
-    scales:{y:{grid:{color:"#F2E2E7"},ticks:{color:"#B09BA2"}},x:{grid:{display:false},ticks:{color:"#B09BA2"}}}}});
+    scales:{y:{grace:"18%",grid:{color:"#F2E2E7"},ticks:{color:"#B09BA2"}},x:{grid:{display:false},ticks:{color:"#B09BA2"}}}}});
   if(legendId&&$("#"+legendId)) $("#"+legendId).innerHTML=cfg.datasets.map(d=>`<span><span class="sw" style="background:${d.borderColor}"></span>${d.label}</span>`).join("");
 }
 function tableSearch(rowsAll,cols,mount,searchId,emptyMsg){
