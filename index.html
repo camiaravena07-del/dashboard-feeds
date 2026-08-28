@@ -324,6 +324,7 @@ PAGES.oferta = el=>{
 };
 PAGES.gaps = el=>{
   const det=DATA.gaps_detalle||[], pres=DATA.gaps_presencia||[];
+  let selPres=null;
   const feeds=uniq(det.map(r=>r.feed)).sort();
   const temps=uniq(det.map(r=>r.temporada)).sort();
   el.innerHTML=`<div class="h"><h2 class="serif">Cobertura de catálogo</h2><div class="desc">Elige un feed para ver qué productos deberían estar en él pero faltan (y en qué otros feeds sí están). La relación es bidireccional.</div></div>
@@ -342,25 +343,34 @@ PAGES.gaps = el=>{
   const draw=()=>{
     const feed=$("#g-feed").value, temp=$("#g-temp").value, q=($("#g-s").value||"").toLowerCase();
     const okFeed=r=>feed==="Todos los feeds"||r.feed===feed;
-    let rows=det.filter(r=>okFeed(r)&&(temp==="Todas"||r.temporada===temp)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
+    const okP=r=>feed==="Todos los feeds"||r.feed_falta===feed;
 
-    // torta por temporada (respeta feed, no el filtro de temporada para no quedar en 1 slice)
+    // mapa sku -> {feedPresente: unidades} (para el feed filtrado)
+    const presMap={};
+    pres.filter(okP).forEach(r=>{ (presMap[r.sku]=presMap[r.sku]||{})[r.feed_presente]=num(r.unidades); });
+
+    // torta por temporada
     const porTemp={}; det.filter(okFeed).forEach(r=>{const t=r.temporada||"(sin temp)"; porTemp[t]=(porTemp[t]||0)+1;});
     const labels=Object.keys(porTemp), vals=labels.map(l=>porTemp[l]);
     const cv=$("#g-pie"); if(cv._chart) cv._chart.destroy();
     cv._chart=new Chart(cv,{type:"doughnut",data:{labels,datasets:[{data:vals,backgroundColor:PALETTE,borderColor:"#fff",borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"right",labels:{color:"#3B2C34",font:{size:11}}}}}});
 
-    // feeds donde SÍ están (presencia agregada)
-    const okP=r=>feed==="Todos los feeds"||r.feed_falta===feed;
+    // feeds donde SÍ están (presencia agregada) — clickeable
     const agg={}; pres.filter(okP).forEach(r=>{const f=r.feed_presente; if(!agg[f])agg[f]={sk:new Set(),u:0}; agg[f].sk.add(r.sku); agg[f].u+=num(r.unidades);});
     const filas=Object.keys(agg).map(f=>[f,agg[f].sk.size,agg[f].u]).sort((a,b)=>b[1]-a[1]);
-    $("#g-pres").innerHTML=filas.length?`<table><thead><tr><th>Feed</th><th class="r">Productos</th><th class="r">Unidades</th></tr></thead><tbody>${filas.map(f=>`<tr><td>${f[0]}</td><td class="r mono">${f[1].toLocaleString("es-CL")}</td><td class="r mono">${f[2].toLocaleString("es-CL")}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">—</div>`;
+    $("#g-pres").innerHTML=filas.length?`<table><thead><tr><th>Feed</th><th class="r">Productos</th><th class="r">Unidades</th></tr></thead><tbody>${filas.map(f=>`<tr class="prow" data-feed="${f[0]}" style="cursor:pointer${f[0]===selPres?';background:var(--soft);font-weight:600':''}"><td>${f[0]}${f[0]===selPres?' ✕':''}</td><td class="r mono">${f[1].toLocaleString("es-CL")}</td><td class="r mono">${f[2].toLocaleString("es-CL")}</td></tr>`).join("")}</tbody></table><div class="rowcount">Clic en un feed para filtrar el detalle</div>`:`<div class="empty">—</div>`;
+    el.querySelectorAll(".prow").forEach(tr=>tr.onclick=()=>{const f=tr.dataset.feed; selPres=(selPres===f)?null:f; draw();});
 
-    // detalle
-    $("#g-det").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Falta en</th><th>Marca</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Temp.</th><th>Descuento</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--rose-d)">${r.feed||""}</td><td>${r.marca||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.pmax||""}</td><td>${r.temporada||""}</td><td>${r.en_oferta==="Si"?'<span class="badge b-promo">Con descuento</span>':'<span class="badge b-na">—</span>'}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} productos faltantes</div>`:`<div class="ok">✓ Sin faltantes para este filtro</div>`;
-    window.__gapsRows=rows;
+    // detalle (respeta feed presente seleccionado, con unidades de ESE feed)
+    let rows=det.filter(r=>okFeed(r)&&(temp==="Todas"||r.temporada===temp)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
+    if(selPres) rows=rows.filter(r=>presMap[r.sku]&&presMap[r.sku][selPres]!=null);
+    const unidadesDe=sku=>{const m=presMap[sku]||{}; return selPres?(m[selPres]||0):Object.values(m).reduce((a,b)=>a+b,0);};
+    const uHead=selPres?`Unid. en ${selPres}`:"Unid. totales";
+    const outRows=rows.map(r=>({...r, unidades:unidadesDe(r.sku)}));
+    $("#g-det").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Falta en</th><th>Marca</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Temp.</th><th class="r">${uHead}</th><th>Descuento</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--rose-d)">${r.feed||""}</td><td>${r.marca||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.pmax||""}</td><td>${r.temporada||""}</td><td class="r mono">${unidadesDe(r.sku).toLocaleString("es-CL")}</td><td>${r.en_oferta==="Si"?'<span class="badge b-promo">Con descuento</span>':'<span class="badge b-na">—</span>'}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} productos${selPres?" · en "+selPres:""}</div>`:`<div class="ok">✓ Sin faltantes para este filtro</div>`;
+    window.__gapsRows=outRows;
   };
-  $("#g-feed").onchange=draw; $("#g-temp").onchange=draw; $("#g-s").oninput=draw;
+  $("#g-feed").onchange=()=>{selPres=null;draw();}; $("#g-temp").onchange=draw; $("#g-s").oninput=draw;
   $("#g-dl").onclick=()=>downloadCSV("cobertura_faltantes.csv", window.__gapsRows||[]);
   draw();
 };
