@@ -106,7 +106,6 @@
       <a data-page="oferta">Oferta inconsistente<span class="chip" id="n-oferta">·</span></a>
       <div class="sec">3 · Cobertura de catálogo</div>
       <a data-page="gaps">Productos faltantes<span class="chip" id="n-gaps">·</span></a>
-      <a data-page="val">Validación SALE<span class="chip" id="n-val">·</span></a>
     </nav>
     <div style="margin-top:auto" class="updated" id="updated"></div>
   </aside>
@@ -115,7 +114,7 @@
 
 <script>
 const SHEET_ID = "1SdMdx9_1wPYQbJjhHLeUDN6E8fdVGWTAvolL6vcwb9M";
-const TABS = ["historico","precio_full_distinto","precio_especial_distinto","oferta_inconsistente","gaps_detalle","gaps_resumen","validacion_sale","meta"];
+const TABS = ["historico","precio_full_distinto","precio_especial_distinto","oferta_inconsistente","gaps_detalle","gaps_resumen","gaps_presencia","meta"];
 const PALETTE = ["#C0637F","#4E7A67","#D2748E","#9C8AC9","#C99A5B","#6E9AC4","#B9607E","#7EA981","#A2405F","#8C6BAF","#CB8A6A","#5C86A8","#D98BA6","#66937B","#B07BB8","#C77A5C","#7B9FC9","#A5566F"];
 
 const $ = s => document.querySelector(s);
@@ -173,7 +172,6 @@ function boot(){
   $("#n-full").textContent=(DATA.precio_full_distinto||[]).length;
   $("#n-oferta").textContent=(DATA.oferta_inconsistente||[]).length;
   $("#n-gaps").textContent=(DATA.gaps_detalle||[]).length;
-  $("#n-val").textContent=(DATA.validacion_sale||[]).length;
 
   // contenedores de cada página
   $("#app").innerHTML = Object.keys(PAGES).map(id=>`<div class="page" id="pg-${id}"></div>`).join("");
@@ -365,15 +363,6 @@ PAGES.gaps = el=>{
   $("#g-feed").onchange=draw; $("#g-temp").onchange=draw; $("#g-s").oninput=draw;
   $("#g-dl").onclick=()=>downloadCSV("cobertura_faltantes.csv", window.__gapsRows||[]);
   draw();
-};
-PAGES.val = el=>{
-  const rowsAll=DATA.validacion_sale||[];
-  const badge=v=>v==="Si"?'<span class="badge b-si">Sí</span>':(v==="No cargado"?'<span class="badge b-no">No cargado</span>':'<span class="badge b-na">N/A</span>');
-  el.innerHTML=`<div class="h"><h2 class="serif">Validación de carga SALE</h2><div class="desc">Productos en oferta en la marca de origen y si están cargados en cada agregador.</div></div><div class="controls"><span class="lab">Marca origen</span><select id="f-val"><option>Todas</option>${opts(uniq(rowsAll.map(r=>r.marca_origen)))}</select><input type="search" id="s-val" placeholder="Buscar…"></div><div id="t-val"></div>`;
-  const draw=()=>{const m=$("#f-val").value,q=($("#s-val").value||"").toLowerCase();
-    const rows=rowsAll.filter(r=>(m==="Todas"||r.marca_origen===m)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
-    $("#t-val").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Marca</th><th>SKU</th><th>Producto</th><th>Temp.</th><th class="r">Precio SALE</th><th class="r">Desc.</th><th>Kliper</th><th>Andesgear</th><th>Surprice</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.marca_origen||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.temporada||""}</td><td class="r mono">${clp(num(r.precio_sale))}</td><td class="r mono">${num(r.descuento_pct)}%</td><td>${badge(r.en_kliper)}</td><td>${badge(r.en_andesgear)}</td><td>${badge(r.en_surprice)}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} SKU en SALE</div>`:`<div class="empty">Sin productos en SALE para este filtro.</div>`;};
-  $("#f-val").onchange=draw;$("#s-val").oninput=draw;draw();
 };
 </script>
 </body>
