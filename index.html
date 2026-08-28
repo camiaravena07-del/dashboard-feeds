@@ -83,6 +83,15 @@
   .tchip{font:500 12px/1 'DM Sans';color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:7px 13px;cursor:pointer;user-select:none;transition:all .12s}
   .tchip:hover{border-color:var(--rose)}
   .tchip.on{background:var(--rose);border-color:var(--rose);color:#fff}
+  .msel{position:relative;display:inline-block}
+  .msel-btn{font-family:inherit;font-size:13px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer;min-width:180px;text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .msel-btn:hover{border-color:var(--rose)}
+  .msel-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 28px rgba(90,40,60,.14);padding:6px;min-width:210px;max-height:300px;overflow:auto;display:none}
+  .msel-pop.open{display:block}
+  .msel-pop label{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;font:400 13px/1 'DM Sans';color:var(--ink);cursor:pointer}
+  .msel-pop label:hover{background:var(--soft)}
+  .msel-pop input{accent-color:var(--rose);width:15px;height:15px}
+  .msel-all{border-bottom:1px solid var(--line2);margin-bottom:4px;font-weight:600 !important}
   .empty{padding:40px;text-align:center;color:var(--muted)}
   .ok{padding:30px;text-align:center;color:var(--green);font:500 15px/1.4 'DM Sans'}
   .loading{padding:80px;text-align:center;color:var(--muted)}
@@ -348,10 +357,15 @@ PAGES.gaps = el=>{
   el.innerHTML=`<div class="h"><h2 class="serif">Cobertura de catálogo</h2><div class="desc">Elige un feed para ver qué productos deberían estar en él pero faltan (y en qué otros feeds sí están). La relación es bidireccional.</div></div>
     <div class="controls">
       <span class="lab">Feed</span><select id="g-feed"><option>Todos los feeds</option>${opts(feeds)}</select>
+      <span class="lab">Temporada</span>
+      <div class="msel"><button class="msel-btn" id="g-temp-btn"><span id="g-temp-lbl">Todas</span><span style="color:var(--faint)">▾</span></button>
+        <div class="msel-pop" id="g-temp-pop">
+          <label class="msel-all"><input type="checkbox" id="g-temp-all" checked>Todas</label>
+          ${temps.map(t=>`<label><input type="checkbox" class="g-temp-cb" value="${t}">${t}</label>`).join("")}
+        </div></div>
       <input type="search" id="g-s" placeholder="Buscar SKU o producto…">
       <button class="btn" id="g-dl">Descargar CSV</button>
     </div>
-    <div style="margin:2px 0 20px"><div class="label" style="margin-bottom:8px">Temporada</div><div id="g-temps" style="display:flex;flex-wrap:wrap;gap:7px">${temps.map(t=>`<label class="tchip"><input type="checkbox" value="${t}" style="display:none">${t}</label>`).join("")}</div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
       <div class="card"><div class="label" style="margin-bottom:10px">Productos faltantes por temporada</div><div class="chart-box" style="height:260px"><canvas id="g-pie"></canvas></div></div>
       <div class="card"><div class="label" style="margin-bottom:14px">Feeds donde sí están estos productos</div><div id="g-pres"></div></div>
@@ -392,11 +406,15 @@ PAGES.gaps = el=>{
     window.__gapsRows=outRows;
   };
   $("#g-feed").onchange=()=>{selPres=null;draw();}; $("#g-s").oninput=draw;
-  el.querySelectorAll("#g-temps .tchip").forEach(lab=>lab.onclick=()=>{
-    const v=lab.querySelector("input").value;
-    if(selTemps.has(v)){selTemps.delete(v);lab.classList.remove("on");}
-    else{selTemps.add(v);lab.classList.add("on");}
-    selPie=null; draw();
+  // dropdown multiselección tipo Excel
+  const btn=$("#g-temp-btn"), pop=$("#g-temp-pop"), lbl=$("#g-temp-lbl"), all=$("#g-temp-all");
+  btn.onclick=e=>{e.stopPropagation();pop.classList.toggle("open");};
+  document.addEventListener("click",e=>{if(!pop.contains(e.target)&&e.target!==btn&&!btn.contains(e.target))pop.classList.remove("open");});
+  const syncLbl=()=>{lbl.textContent=selTemps.size===0?"Todas":(selTemps.size===1?[...selTemps][0]:selTemps.size+" temporadas");all.checked=selTemps.size===0;};
+  all.onclick=()=>{selTemps.clear();selPie=null;el.querySelectorAll(".g-temp-cb").forEach(c=>c.checked=false);syncLbl();draw();};
+  el.querySelectorAll(".g-temp-cb").forEach(cb=>cb.onchange=()=>{
+    if(cb.checked)selTemps.add(cb.value);else selTemps.delete(cb.value);
+    selPie=null;syncLbl();draw();
   });
   $("#g-dl").onclick=()=>downloadCSV("cobertura_faltantes.csv", window.__gapsRows||[]);
   draw();
