@@ -388,7 +388,7 @@ PAGES.gaps = el=>{
     const porTemp={}; det.filter(okFeed).forEach(r=>{const t=r.temporada||"(sin temp)"; porTemp[t]=(porTemp[t]||0)+1;});
     const labels=Object.keys(porTemp), vals=labels.map(l=>porTemp[l]);
     const cv=$("#g-pie"); if(cv._chart) cv._chart.destroy();
-    cv._chart=new Chart(cv,{type:"doughnut",data:{labels,datasets:[{data:vals,backgroundColor:labels.map((l,i)=>l===selPie?"#8F3E58":PALETTE[i%PALETTE.length]),borderColor:"#fff",borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length){const t=labels[els[0].index]; selPie=(selPie===t)?null:t; draw();}},plugins:{legend:{position:"right",labels:{color:"#3B2C34",font:{size:11}}}}}});
+    cv._chart=new Chart(cv,{type:"doughnut",data:{labels,datasets:[{data:vals,backgroundColor:labels.map((l,i)=>{const c=PALETTE[i%PALETTE.length];return !selPie?c:(l===selPie?c:c+"33");}),borderColor:"#fff",borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length){const t=labels[els[0].index]; selPie=(selPie===t)?null:t; draw();}},plugins:{legend:{position:"right",labels:{color:"#3B2C34",font:{size:11}}}}}});
 
     // feeds donde SÍ están (presencia agregada) — clickeable
     const agg={}; pres.filter(okP).forEach(r=>{const f=r.feed_presente; if(!agg[f])agg[f]={sk:new Set(),u:0}; agg[f].sk.add(r.sku); agg[f].u+=num(r.unidades);});
@@ -405,7 +405,7 @@ PAGES.gaps = el=>{
     $("#g-det").innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Falta en</th><th>Marca</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Temp.</th><th class="r">${uHead}</th><th>Descuento</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--rose-d)">${r.feed||""}</td><td>${r.marca||""}</td><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.pmax||""}</td><td>${r.temporada||""}</td><td class="r mono">${unidadesDe(r.sku).toLocaleString("es-CL")}</td><td>${r.en_oferta==="Si"?'<span class="badge b-promo">Con descuento</span>':'<span class="badge b-na">—</span>'}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${rows.length} productos${selPres?" · en "+selPres:""}</div>`:`<div class="ok">✓ Sin faltantes para este filtro</div>`;
     window.__gapsRows=outRows;
   };
-  $("#g-feed").onchange=()=>{selPres=null;draw();}; $("#g-s").oninput=draw;
+  $("#g-feed").onchange=()=>{selPres=null;selPie=null;selTemps.clear();el.querySelectorAll(".g-temp-cb").forEach(c=>c.checked=false);$("#g-temp-lbl").textContent="Todas";$("#g-temp-all").checked=true;draw();}; $("#g-s").oninput=draw;
   // dropdown multiselección tipo Excel
   const btn=$("#g-temp-btn"), pop=$("#g-temp-pop"), lbl=$("#g-temp-lbl"), all=$("#g-temp-all");
   btn.onclick=e=>{e.stopPropagation();pop.classList.toggle("open");};
