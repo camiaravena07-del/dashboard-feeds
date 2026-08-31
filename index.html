@@ -242,23 +242,27 @@ PAGES.disp = el=>{
 // PÁGINA 3 — Disponibilidad por categoría (línea + filtro marca + categoria/pmax)
 PAGES["disp-pmax"] = el=>{
   el.innerHTML=`
-    <div class="h"><h2 class="serif">Disponibilidad por categoría</h2><div class="desc">Evolución histórica de productos disponibles por categoría, para la marca seleccionada.</div></div>
+    <div class="h"><h2 class="serif">Disponibilidad por categoría</h2><div class="desc">Evolución histórica de productos disponibles por categoría. En sitios multimarca (Kliper, Surprice, Andesgear) puedes además filtrar por marca del producto.</div></div>
     <div class="controls">
-      <span class="lab">Marca</span><select id="f-pm-marca">${opts(marcas())}</select>
+      <span class="lab">Feed</span><select id="f-pm-feed">${opts(marcas())}</select>
+      <span class="lab">Marca</span><select id="f-pm-mp"></select>
       <span class="lab">Categoría</span><select id="f-pm-cat"></select>
     </div>
     <div class="card"><div class="legend" id="lg-pm"></div><div class="chart-box" style="height:380px"><canvas id="ch-pm"></canvas></div></div>`;
-  const cats=()=>uniq(H().filter(r=>r.marca===$("#f-pm-marca").value).map(r=>r.pmax)).sort();
-  const fillCats=()=>{$("#f-pm-cat").innerHTML=`<option>Todas las categorías</option>`+opts(cats());};
+  const feedRows=()=>H().filter(r=>r.marca===$("#f-pm-feed").value);
+  const marcasProd=()=>uniq(feedRows().map(r=>r.marca_producto).filter(x=>x&&x!=="")).sort();
+  const fillMP=()=>{const ms=marcasProd(); $("#f-pm-mp").innerHTML=`<option>Todas las marcas</option>`+opts(ms); $("#f-pm-mp").disabled=ms.length===0;};
+  const curRows=()=>{let rows=feedRows(); const mp=$("#f-pm-mp").value; if(mp&&mp!=="Todas las marcas") rows=rows.filter(r=>r.marca_producto===mp); return rows;};
+  const fillCats=()=>{const cats=uniq(curRows().map(r=>r.pmax)).sort(); $("#f-pm-cat").innerHTML=`<option>Todas las categorías</option>`+opts(cats);};
   const render=()=>{
-    const m=$("#f-pm-marca").value, c=$("#f-pm-cat").value;
-    let rows=H().filter(r=>r.marca===m);
+    let rows=curRows(); const c=$("#f-pm-cat").value;
     if(c&&c!=="Todas las categorías") rows=rows.filter(r=>r.pmax===c);
     drawLine("ch-pm","lg-pm",serieLineas(rows,"pmax","disponibles"));
   };
-  $("#f-pm-marca").onchange=()=>{fillCats();render();};
+  $("#f-pm-feed").onchange=()=>{fillMP();fillCats();render();};
+  $("#f-pm-mp").onchange=()=>{fillCats();render();};
   $("#f-pm-cat").onchange=render;
-  fillCats(); render();
+  fillMP(); fillCats(); render();
 };
 
 // PÁGINA — Detalle por categoría (tabla)
