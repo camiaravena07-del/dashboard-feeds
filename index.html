@@ -91,6 +91,9 @@
   .msel-pop label:hover{background:var(--soft)}
   .msel-pop input{accent-color:var(--rose);width:15px;height:15px}
   .msel-all{border-bottom:1px solid var(--line2);margin-bottom:4px;font-weight:600 !important}
+  .msel-search{width:100%;margin-bottom:6px;font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--soft2);border:1px solid var(--line);border-radius:7px;padding:7px 9px}
+  .msel-search:focus{outline:none;border-color:var(--rose)}
+  .msel-list{max-height:220px;overflow:auto}
   .empty{padding:40px;text-align:center;color:var(--muted)}
   .ok{padding:30px;text-align:center;color:var(--green);font:500 15px/1.4 'DM Sans'}
   .loading{padding:80px;text-align:center;color:var(--muted)}
@@ -254,11 +257,15 @@ PAGES["disp-pmax"] = el=>{
   // rellena un popup de checkboxes; devuelve las opciones disponibles
   const fillPop=(popId,lblId,sel,options,label)=>{
     const pop=$(popId);
-    pop.innerHTML=`<label class="msel-all"><input type="checkbox" class="all"${sel.size===0?" checked":""}>Todas</label>`+
-      options.map(o=>`<label><input type="checkbox" value="${o}"${sel.has(o)?" checked":""}>${o}</label>`).join("");
+    pop.innerHTML=`<input type="search" class="msel-search" placeholder="Buscar…">`+
+      `<label class="msel-all"><input type="checkbox" class="all"${sel.size===0?" checked":""}>Todas</label>`+
+      `<div class="msel-list">`+options.map(o=>`<label><input type="checkbox" value="${o}"${sel.has(o)?" checked":""}>${o}</label>`).join("")+`</div>`;
     $(lblId).textContent = sel.size===0?"Todas":(sel.size===1?[...sel][0]:sel.size+" "+label);
     pop.querySelector(".all").onclick=()=>{sel.clear();refresh();};
     pop.querySelectorAll("input[value]").forEach(cb=>cb.onchange=()=>{cb.checked?sel.add(cb.value):sel.delete(cb.value);refresh();});
+    const sb=pop.querySelector(".msel-search");
+    sb.onclick=e=>e.stopPropagation();
+    sb.oninput=()=>{const q=sb.value.toLowerCase();pop.querySelectorAll(".msel-list label").forEach(l=>{l.style.display=l.textContent.toLowerCase().includes(q)?"":"none";});};
   };
   const marcasOpts=()=>uniq(feedRows().filter(r=>selCat.size===0||selCat.has(r.pmax)).map(r=>r.marca_producto).filter(x=>x&&x!=="")).sort();
   const catsOpts=()=>uniq(feedRows().filter(r=>selMP.size===0||selMP.has(r.marca_producto)).map(r=>r.pmax)).sort();
