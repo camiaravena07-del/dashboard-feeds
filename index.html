@@ -242,27 +242,46 @@ PAGES.disp = el=>{
 // PÁGINA 3 — Disponibilidad por categoría (línea + filtro marca + categoria/pmax)
 PAGES["disp-pmax"] = el=>{
   el.innerHTML=`
-    <div class="h"><h2 class="serif">Disponibilidad por categoría</h2><div class="desc">Evolución histórica de productos disponibles por categoría. En sitios multimarca (Kliper, Surprice, Andesgear) puedes además filtrar por marca del producto.</div></div>
+    <div class="h"><h2 class="serif">Disponibilidad por categoría</h2><div class="desc">Evolución histórica de productos disponibles por categoría. En sitios multimarca (Kliper, Surprice, Andesgear) puedes filtrar por una o varias marcas. Los filtros se acotan entre sí.</div></div>
     <div class="controls">
       <span class="lab">Feed</span><select id="f-pm-feed">${opts(marcas())}</select>
-      <span class="lab">Marca</span><select id="f-pm-mp"></select>
-      <span class="lab">Categoría</span><select id="f-pm-cat"></select>
+      <span class="lab">Marca</span><div class="msel"><button class="msel-btn" id="mp-btn"><span id="mp-lbl">Todas</span><span style="color:var(--faint)">▾</span></button><div class="msel-pop" id="mp-pop"></div></div>
+      <span class="lab">Categoría</span><div class="msel"><button class="msel-btn" id="cat-btn"><span id="cat-lbl">Todas</span><span style="color:var(--faint)">▾</span></button><div class="msel-pop" id="cat-pop"></div></div>
     </div>
     <div class="card"><div class="legend" id="lg-pm"></div><div class="chart-box" style="height:380px"><canvas id="ch-pm"></canvas></div></div>`;
   const feedRows=()=>H().filter(r=>r.marca===$("#f-pm-feed").value);
-  const marcasProd=()=>uniq(feedRows().map(r=>r.marca_producto).filter(x=>x&&x!=="")).sort();
-  const fillMP=()=>{const ms=marcasProd(); $("#f-pm-mp").innerHTML=`<option>Todas las marcas</option>`+opts(ms); $("#f-pm-mp").disabled=ms.length===0;};
-  const curRows=()=>{let rows=feedRows(); const mp=$("#f-pm-mp").value; if(mp&&mp!=="Todas las marcas") rows=rows.filter(r=>r.marca_producto===mp); return rows;};
-  const fillCats=()=>{const cats=uniq(curRows().map(r=>r.pmax)).sort(); $("#f-pm-cat").innerHTML=`<option>Todas las categorías</option>`+opts(cats);};
+  const selMP=new Set(), selCat=new Set();
+  // rellena un popup de checkboxes; devuelve las opciones disponibles
+  const fillPop=(popId,lblId,sel,options,label)=>{
+    const pop=$(popId);
+    pop.innerHTML=`<label class="msel-all"><input type="checkbox" class="all"${sel.size===0?" checked":""}>Todas</label>`+
+      options.map(o=>`<label><input type="checkbox" value="${o}"${sel.has(o)?" checked":""}>${o}</label>`).join("");
+    $(lblId).textContent = sel.size===0?"Todas":(sel.size===1?[...sel][0]:sel.size+" "+label);
+    pop.querySelector(".all").onclick=()=>{sel.clear();refresh();};
+    pop.querySelectorAll("input[value]").forEach(cb=>cb.onchange=()=>{cb.checked?sel.add(cb.value):sel.delete(cb.value);refresh();});
+  };
+  const marcasOpts=()=>uniq(feedRows().filter(r=>selCat.size===0||selCat.has(r.pmax)).map(r=>r.marca_producto).filter(x=>x&&x!=="")).sort();
+  const catsOpts=()=>uniq(feedRows().filter(r=>selMP.size===0||selMP.has(r.marca_producto)).map(r=>r.pmax)).sort();
+  const refresh=()=>{
+    const mOpts=marcasOpts();
+    [...selMP].forEach(m=>{if(!mOpts.includes(m))selMP.delete(m);});   // limpia selecciones ya no válidas
+    [...selCat].forEach(c=>{if(!catsOpts().includes(c))selCat.delete(c);});
+    fillPop("#mp-pop","#mp-lbl",selMP,mOpts,"marcas");
+    $("#mp-btn").disabled=mOpts.length===0 && selMP.size===0;
+    fillPop("#cat-pop","#cat-lbl",selCat,catsOpts(),"categorías");
+    render();
+  };
   const render=()=>{
-    let rows=curRows(); const c=$("#f-pm-cat").value;
-    if(c&&c!=="Todas las categorías") rows=rows.filter(r=>r.pmax===c);
+    let rows=feedRows();
+    if(selMP.size) rows=rows.filter(r=>selMP.has(r.marca_producto));
+    if(selCat.size) rows=rows.filter(r=>selCat.has(r.pmax));
     drawLine("ch-pm","lg-pm",serieLineas(rows,"pmax","disponibles"));
   };
-  $("#f-pm-feed").onchange=()=>{fillMP();fillCats();render();};
-  $("#f-pm-mp").onchange=()=>{fillCats();render();};
-  $("#f-pm-cat").onchange=render;
-  fillMP(); fillCats(); render();
+  const popToggle=(btnId,popId)=>{const b=$(btnId),p=$(popId);b.onclick=e=>{e.stopPropagation();document.querySelectorAll(".msel-pop").forEach(x=>{if(x!==p)x.classList.remove("open");});p.classList.toggle("open");};};
+  popToggle("#mp-btn","#mp-pop"); popToggle("#cat-btn","#cat-pop");
+  document.addEventListener("click",e=>{if(!el.querySelector(".controls").contains(e.target))el.querySelectorAll(".msel-pop").forEach(p=>p.classList.remove("open"));});
+  $("#f-pm-feed").onchange=()=>{selMP.clear();selCat.clear();refresh();};
+  refresh();
 };
 
 // PÁGINA — Detalle por categoría (tabla)
