@@ -285,6 +285,8 @@
       <a data-page="oferta">Oferta inconsistente<span class="ncount neutral" id="n-oferta">·</span></a>
       <div class="sec">3 · Cobertura de catálogo</div>
       <a data-page="gaps">Productos faltantes<span class="ncount neutral" id="n-gaps">·</span></a>
+      <div class="sec">Herramientas</div>
+      <a data-page="consolidado">Consolidado de precios</a>
     </nav>
   </aside>
 
@@ -620,6 +622,33 @@ PAGES.gaps = el=>{
   draw();
 };
 
+PAGES.consolidado = el=>{
+  el.innerHTML=`<div class="h"><h2 class="serif">Consolidado de precios full</h2><div class="desc">Todos los productos de los 18 feeds en un solo lugar, con su precio full. Pensado para descargar y cruzar con las planillas de los PM. Esta tabla se carga aparte por su tamaño.</div></div><div id="cons-body"><div class="loading">Cargando consolidado… (puede tardar unos segundos)</div></div>`;
+  const mount=$("#cons-body");
+  const paint=rows=>{
+    const feeds=uniq(rows.map(r=>r.feed)).sort();
+    mount.innerHTML=`<div class="controls">
+        <span class="lab">Feed</span><select id="cons-feed"><option>Todos los feeds</option>${opts(feeds)}</select>
+        <input type="search" id="cons-s" placeholder="Buscar SKU o producto…">
+        <button class="btn" id="cons-dl">Descargar CSV</button>
+      </div><div id="cons-tab"></div>`;
+    const CAP=500;
+    const draw=()=>{
+      const f=$("#cons-feed").value, q=($("#cons-s").value||"").toLowerCase();
+      const fil=rows.filter(r=>(f==="Todos los feeds"||r.feed===f)&&(!q||((r.sku||"")+" "+(r.nombre_producto||"")).toLowerCase().includes(q)));
+      const shown=fil.slice(0,CAP);
+      $("#cons-tab").innerHTML=fil.length?`<div class="tablewrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Feed</th><th class="r">Precio full</th></tr></thead><tbody>${shown.map(r=>`<tr><td class="sku">${r.sku||""}</td><td>${r.nombre_producto||""}</td><td>${r.feed||""}</td><td class="r mono">${clp(num(r.precio_full))}</td></tr>`).join("")}</tbody></table></div><div class="rowcount">${fil.length.toLocaleString("es-CL")} productos${fil.length>CAP?` · mostrando los primeros ${CAP} (usa el buscador o descarga el CSV para ver todo)`:""}</div>`:`<div class="empty">Sin resultados.</div>`;
+      window.__consRows=fil;
+    };
+    $("#cons-feed").onchange=draw; $("#cons-s").oninput=draw;
+    $("#cons-dl").onclick=()=>downloadCSV("consolidado_full.csv", window.__consRows||rows);
+    draw();
+  };
+  if(window.__consCache){ paint(window.__consCache); return; }
+  Papa.parse(csvUrl("consolidado_full"),{download:true,header:true,skipEmptyLines:true,
+    complete:r=>{window.__consCache=r.data||[]; paint(window.__consCache);},
+    error:()=>{mount.innerHTML='<div class="empty">No se pudo cargar el consolidado.</div>';}});
+};
 (function(){var b=document.getElementById("burger"),a=document.getElementById("aside"),s=document.getElementById("scrim");
  if(b&&a&&s){var close=function(){a.classList.remove("open");s.classList.remove("show");};
  b.onclick=function(){a.classList.toggle("open");s.classList.toggle("show");};
