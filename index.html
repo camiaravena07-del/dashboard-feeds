@@ -168,6 +168,14 @@
   th.sorted .arrow{opacity:1;color:var(--rose)}
   th.r,td.r{text-align:right}
   td{padding:11px 13px;border-bottom:1px solid var(--line2);color:var(--ink)}
+  /* --- tabla apilada por SKU: compacta y sin scroll horizontal --- */
+  table.stacked{table-layout:auto}
+  table.stacked td,table.stacked th{padding:9px 12px}
+  table.stacked .col-prod{max-width:250px;white-space:normal;line-height:1.35}
+  table.stacked td[rowspan]{vertical-align:top;background:var(--soft2)}
+  table.stacked tr.grp-first td{border-top:2px solid var(--line)}
+  table.stacked .feedcell.barato{font-weight:600;color:var(--rose-d)}
+  table.stacked .tag-barato{display:inline-block;margin-left:6px;font:600 9.5px/1 'DM Sans';letter-spacing:.03em;text-transform:uppercase;color:var(--ok);background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:20px;padding:3px 7px;vertical-align:middle}
   /* zebra striping para escaneo */
   tbody tr:nth-child(even){background:var(--soft2)}
   tbody tr:hover{background:var(--soft)}
@@ -493,12 +501,16 @@ function downloadCSV(name,rows){
 }
 // tabla apilada por SKU con filtros de feed + temporada + búsqueda + descarga
 function stackedTable(rowsAll, valueCols, mount, ids, emptyMsg){
-  const fmtCell=(r,c)=>{const v=r[c[0]];
-    if(c[2]==="clp") return `<td class="r mono">${clp(num(v))}</td>`;
-    if(c[2]==="num") return `<td class="r mono">${num(v).toLocaleString("es-CL")}</td>`;
-    if(c[2]==="pct") return `<td class="r mono">${num(v)}%</td>`;
-    if(c[2]==="badge") return `<td>${v==="Si"?'<span class="badge b-si">En oferta</span>':'<span class="badge b-no">Sin oferta</span>'}</td>`;
-    return `<td>${v||""}</td>`;};
+  // columnas de nivel-SKU (iguales en todas las filas del SKU) se muestran una vez; el resto por feed
+  const grpCols=valueCols.filter(c=>c[3]==="grp");
+  const rowCols=valueCols.filter(c=>c[3]!=="grp");
+  const cellVal=(r,c)=>{const v=r[c[0]];
+    if(c[2]==="clp") return clp(num(v));
+    if(c[2]==="num") return num(v).toLocaleString("es-CL");
+    if(c[2]==="pct") return num(v)+"%";
+    if(c[2]==="badge") return v==="Si"?'<span class="badge b-si">En oferta</span>':'<span class="badge b-no">Sin oferta</span>';
+    return v||"";};
+  const isR=c=>c[2]==="clp"||c[2]==="num"||c[2]==="pct";
   let current=rowsAll;
   const draw=()=>{
     const feed=ids.feed&&$(ids.feed)?$(ids.feed).value:"Todos los feeds";
@@ -512,16 +524,23 @@ function stackedTable(rowsAll, valueCols, mount, ids, emptyMsg){
     if(!rows.length){ $(mount).innerHTML=`<div class="ok">${emptyMsg}</div>`; return; }
     const groups=[]; const seen={};
     rows.forEach(r=>{ if(!(r.sku in seen)){seen[r.sku]=groups.length; groups.push({sku:r.sku,nombre:r.nombre_producto,rows:[]});} groups[seen[r.sku]].rows.push(r); });
-    const head=`<tr><th>SKU</th><th>Producto</th><th>Feed</th>${valueCols.map(c=>`<th class="${c[2]==='clp'||c[2]==='pct'?'r':''}">${c[1]}</th>`).join("")}<th></th></tr>`;
+    const head=`<tr><th>SKU</th><th class="col-prod">Producto</th>`
+      +grpCols.map(c=>`<th>${c[1]}</th>`).join("")
+      +`<th>Feed</th>`
+      +rowCols.map(c=>`<th class="${isR(c)?'r':''}">${c[1]}</th>`).join("")+`</tr>`;
     const body=groups.map(g=>g.rows.map((r,i)=>{
-      const first=i===0, barato=("sobreprecio_pct" in r)&&num(r.sobreprecio_pct)===0&&g.rows.length>1;
-      return `<tr${first?' style="border-top:2px solid var(--line)"':''}>`
-        +(first?`<td class="sku" rowspan="${g.rows.length}" style="vertical-align:top">${g.sku}</td><td rowspan="${g.rows.length}" style="vertical-align:top">${g.nombre||""}</td>`:'')
-        +`<td${barato?' style="font-weight:600;color:var(--rose-d)"':''}>${r.marca||""}</td>`
-        +valueCols.map(c=>fmtCell(r,c)).join("")
-        +`<td>${barato?'<span class="badge b-si">más barato</span>':''}</td></tr>`;
+      const first=i===0, n=g.rows.length;
+      const barato=("sobreprecio_pct" in r)&&num(r.sobreprecio_pct)===0&&n>1;
+      let tr=`<tr${first?' class="grp-first"':''}>`;
+      if(first){
+        tr+=`<td class="sku" rowspan="${n}">${g.sku}</td><td class="col-prod" rowspan="${n}">${g.nombre||""}</td>`;
+        tr+=grpCols.map(c=>`<td rowspan="${n}">${cellVal(g.rows[0],c)}</td>`).join("");
+      }
+      tr+=`<td class="feedcell${barato?' barato':''}">${r.marca||""}${barato?' <span class="tag-barato">más barato</span>':''}</td>`;
+      tr+=rowCols.map(c=>`<td class="${isR(c)?'r mono':''}">${cellVal(r,c)}</td>`).join("");
+      return tr+`</tr>`;
     }).join("")).join("");
-    $(mount).innerHTML=`<div class="tablewrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="rowcount">${groups.length} SKU · ${rows.length} filas</div>`;
+    $(mount).innerHTML=`<div class="tablewrap"><table class="stacked"><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="rowcount">${groups.length.toLocaleString("es-CL")} SKU · ${rows.length.toLocaleString("es-CL")} filas</div>`;
   };
   draw();
   if(ids.feed&&$(ids.feed)) $(ids.feed).onchange=draw;
@@ -538,17 +557,17 @@ const priceControls = (pfx,rows)=>`
 PAGES.full = el=>{
   const rows=DATA.precio_full_distinto||[];
   el.innerHTML=`<div class="h"><h2 class="serif">Precio full distinto</h2><div class="desc">SKUs cuyo precio full no es igual en todos los feeds donde están. El más barato queda destacado.</div></div><div class="controls">${priceControls("ff",rows)}</div><div id="t-full"></div>`;
-  stackedTable(rows, [["precio_full","Precio full","clp"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-full", {feed:"#ff-feed",temp:"#ff-temp",search:"#ff-s",dl:"#ff-dl",dlname:"precio_full_distinto.csv"}, "✓ Sin diferencias de precio full entre feeds");
+  stackedTable(rows, [["precio_full","Precio full","clp"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text","grp"],["marca_producto","Marca prod.","text","grp"]], "#t-full", {feed:"#ff-feed",temp:"#ff-temp",search:"#ff-s",dl:"#ff-dl",dlname:"precio_full_distinto.csv"}, "✓ Sin diferencias de precio full entre feeds");
 };
 PAGES.precios = el=>{
   const rows=DATA.precio_especial_distinto||[];
   el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">SKUs con precio especial distinto entre feeds. Cada fila muestra el feed, su precio de oferta y su % de descuento.</div></div><div class="controls">${priceControls("fp",rows)}</div><div id="t-precios"></div>`;
-  stackedTable(rows, [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["pmax","Categoría","text"],["stock","Stock","num"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-precios", {feed:"#fp-feed",temp:"#fp-temp",search:"#fp-s",dl:"#fp-dl",dlname:"precio_especial_distinto.csv"}, "✓ Sin diferencias de precio especial entre feeds");
+  stackedTable(rows, [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["stock","Stock","num"],["pmax","Categoría","text","grp"],["temporada","Temp.","text","grp"],["marca_producto","Marca prod.","text","grp"]], "#t-precios", {feed:"#fp-feed",temp:"#fp-temp",search:"#fp-s",dl:"#fp-dl",dlname:"precio_especial_distinto.csv"}, "✓ Sin diferencias de precio especial entre feeds");
 };
 PAGES.oferta = el=>{
   const rows=DATA.oferta_inconsistente||[];
   el.innerHTML=`<div class="h"><h2 class="serif">Oferta inconsistente</h2><div class="desc">SKUs con precio especial en algún feed pero no en otro. Cada fila muestra el feed y si el producto está o no en oferta.</div></div><div class="controls">${priceControls("fo",rows)}</div><div id="t-oferta"></div>`;
-  stackedTable(rows, [["en_oferta","Estado","badge"],["precio","Precio","clp"],["descuento_pct","Desc.","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-oferta", {feed:"#fo-feed",temp:"#fo-temp",search:"#fo-s",dl:"#fo-dl",dlname:"oferta_inconsistente.csv"}, "✓ Sin ofertas inconsistentes");
+  stackedTable(rows, [["en_oferta","Estado","badge"],["precio","Precio","clp"],["descuento_pct","Desc.","pct"],["temporada","Temp.","text","grp"],["marca_producto","Marca prod.","text","grp"]], "#t-oferta", {feed:"#fo-feed",temp:"#fo-temp",search:"#fo-s",dl:"#fo-dl",dlname:"oferta_inconsistente.csv"}, "✓ Sin ofertas inconsistentes");
 };
 PAGES.gaps = el=>{
   const det=DATA.gaps_detalle||[], pres=DATA.gaps_presencia||[];
