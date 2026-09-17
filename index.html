@@ -495,6 +495,7 @@ function downloadCSV(name,rows){
 function stackedTable(rowsAll, valueCols, mount, ids, emptyMsg){
   const fmtCell=(r,c)=>{const v=r[c[0]];
     if(c[2]==="clp") return `<td class="r mono">${clp(num(v))}</td>`;
+    if(c[2]==="num") return `<td class="r mono">${num(v).toLocaleString("es-CL")}</td>`;
     if(c[2]==="pct") return `<td class="r mono">${num(v)}%</td>`;
     if(c[2]==="badge") return `<td>${v==="Si"?'<span class="badge b-si">En oferta</span>':'<span class="badge b-no">Sin oferta</span>'}</td>`;
     return `<td>${v||""}</td>`;};
@@ -542,7 +543,7 @@ PAGES.full = el=>{
 PAGES.precios = el=>{
   const rows=DATA.precio_especial_distinto||[];
   el.innerHTML=`<div class="h"><h2 class="serif">Precio especial distinto</h2><div class="desc">SKUs con precio especial distinto entre feeds. Cada fila muestra el feed, su precio de oferta y su % de descuento.</div></div><div class="controls">${priceControls("fp",rows)}</div><div id="t-precios"></div>`;
-  stackedTable(rows, [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-precios", {feed:"#fp-feed",temp:"#fp-temp",search:"#fp-s",dl:"#fp-dl",dlname:"precio_especial_distinto.csv"}, "✓ Sin diferencias de precio especial entre feeds");
+  stackedTable(rows, [["precio_especial","Precio especial","clp"],["descuento_pct","Desc.","pct"],["sobreprecio_pct","Sobre +","pct"],["pmax","Categoría","text"],["stock","Stock","num"],["temporada","Temp.","text"],["marca_producto","Marca prod.","text"]], "#t-precios", {feed:"#fp-feed",temp:"#fp-temp",search:"#fp-s",dl:"#fp-dl",dlname:"precio_especial_distinto.csv"}, "✓ Sin diferencias de precio especial entre feeds");
 };
 PAGES.oferta = el=>{
   const rows=DATA.oferta_inconsistente||[];
