@@ -243,6 +243,10 @@
   input[type=search]:focus{outline:none;border-color:var(--rose);box-shadow:0 0 0 3px var(--soft)}
   .btn:not(.btn-primary):not(.btn-secondary){color:var(--rose-d);background:var(--card);border:1px solid var(--line);border-radius:var(--r-s);padding:9px 14px;font:600 13px/1 'DM Sans';cursor:pointer}
   .btn:not(.btn-primary):not(.btn-secondary):hover{border-color:var(--rose);background:var(--soft2)}
+  .periodbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 18px;padding:12px 14px;background:var(--soft2);border:1px solid var(--line);border-radius:var(--r-m)}
+  .periodbar .chk{display:flex;align-items:center;gap:7px;font:500 12.5px/1 'DM Sans';color:var(--rose-d);cursor:pointer;margin-left:6px}
+  .periodbar .chk input{accent-color:var(--rose);width:15px;height:15px;cursor:pointer}
+  .periodbar #disp-cinfo,.periodbar #pm-cinfo{color:var(--muted);font-weight:400}
   .ok{padding:34px;text-align:center;color:var(--ok);font:500 15px/1.5 'DM Sans';background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:var(--r-m)}
   .legend span{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 'DM Sans';color:var(--body)}
   .loading{padding:80px;text-align:center;color:var(--muted)}
@@ -357,9 +361,63 @@ function drawLine(canvasId,legendId,cfg){
   const el=$("#"+canvasId); if(!el) return;
   if(el._chart) el._chart.destroy();
   el._chart=new Chart(el,{type:"line",data:cfg,options:{responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y.toLocaleString("es-CL")}`}}},
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{
+      const f=(c.dataset._fechas&&c.dataset._fechas[c.dataIndex])?` · ${c.dataset._fechas[c.dataIndex]}`:"";
+      return ` ${c.dataset.label}: ${c.parsed.y.toLocaleString("es-CL")}${f}`;}}}},
     scales:{y:{grace:"18%",grid:{color:"#F2E2E7"},ticks:{color:"#B09BA2"}},x:{grid:{display:false},ticks:{color:"#B09BA2"}}}}});
-  if(legendId&&$("#"+legendId)) $("#"+legendId).innerHTML=cfg.datasets.map(d=>`<span><span class="sw" style="background:${d.borderColor}"></span>${d.label}</span>`).join("");
+  if(legendId&&$("#"+legendId)) $("#"+legendId).innerHTML=cfg.datasets.map(d=>`<span><span class="sw" style="background:${d.borderColor};${d.borderDash?'opacity:.55':''}"></span>${d.label}</span>`).join("");
+}
+// serie con período principal y período de comparación superpuestos (eje = Día 1..N)
+function serieComparada(rows,keyDim,metric,fsMain,fsComp,fixedColor){
+  const keys=uniq(rows.map(r=>r[keyDim])).sort();
+  const n=fsMain.length;
+  const labels=fsComp?Array.from({length:n},(_,i)=>"Día "+(i+1)):fsMain.slice();
+  const idxM={}; fsMain.forEach((f,i)=>idxM[f]=i);
+  const idxC={}; (fsComp||[]).forEach((f,i)=>idxC[f]=i);
+  const ds=[];
+  keys.forEach((k,ci)=>{
+    const c=fixedColor||PALETTE[ci%PALETTE.length];
+    const dM=new Array(n).fill(0);
+    rows.filter(r=>r[keyDim]===k).forEach(r=>{if(idxM[r.fecha]!=null)dM[idxM[r.fecha]]+=num(r[metric]);});
+    ds.push({label:fsComp?k+" (período)":k,data:dM,borderColor:c,backgroundColor:c,borderWidth:2.5,pointRadius:3,pointBackgroundColor:c,pointBorderColor:"#fff",pointBorderWidth:1,tension:.28,_fechas:fsMain});
+    if(fsComp){
+      const dC=new Array(n).fill(0);
+      rows.filter(r=>r[keyDim]===k).forEach(r=>{if(idxC[r.fecha]!=null)dC[idxC[r.fecha]]+=num(r[metric]);});
+      ds.push({label:k+" (comparación)",data:dC,borderColor:c,backgroundColor:"transparent",borderWidth:2,borderDash:[5,4],pointRadius:2,pointBackgroundColor:"#fff",pointBorderColor:c,pointBorderWidth:1,tension:.28,_fechas:fsComp});
+    }
+  });
+  return {labels,datasets:ds};
+}
+// barra de controles de período + lectura
+function periodBar(pfx){
+  const fs=fechas(); const last=fs[fs.length-1]||"";
+  const o=(sel)=>fs.map(f=>`<option${f===sel?" selected":""}>${f}</option>`).join("");
+  return `<div class="periodbar">
+    <span class="lab">Período</span>
+    <select id="${pfx}-di">${o(fs[0])}</select><span class="lab">a</span><select id="${pfx}-dh">${o(last)}</select>
+    <label class="chk"><input type="checkbox" id="${pfx}-cmp"> Comparar con</label>
+    <select id="${pfx}-ci" disabled>${o(fs[0])}</select>
+    <span class="lab" id="${pfx}-cinfo"></span>
+  </div>`;
+}
+function readPeriods(pfx){
+  const fs=fechas();
+  let iA=fs.indexOf($("#"+pfx+"-di").value), jA=fs.indexOf($("#"+pfx+"-dh").value);
+  if(iA<0)iA=0; if(jA<0)jA=fs.length-1; if(jA<iA)jA=iA;
+  const main=fs.slice(iA,jA+1);
+  let comp=null;
+  const on=$("#"+pfx+"-cmp")&&$("#"+pfx+"-cmp").checked;
+  if(on){
+    let ci=fs.indexOf($("#"+pfx+"-ci").value); if(ci<0)ci=0;
+    comp=fs.slice(ci,ci+main.length);
+    if(comp.length<main.length){const s=Math.max(0,fs.length-main.length);comp=fs.slice(s,s+main.length);}
+    const info=$("#"+pfx+"-cinfo"); if(info)info.textContent=comp.length?`${comp[0]} a ${comp[comp.length-1]}`:"(sin datos suficientes)";
+  }
+  return {main,comp};
+}
+function wirePeriod(pfx,render){
+  ["-di","-dh","-ci"].forEach(s=>{const e=$("#"+pfx+s); if(e)e.onchange=render;});
+  const cmp=$("#"+pfx+"-cmp"); if(cmp)cmp.onchange=()=>{$("#"+pfx+"-ci").disabled=!cmp.checked;render();};
 }
 function tableSearch(rowsAll,cols,mount,searchId,emptyMsg){
   const draw=q=>{
@@ -414,13 +472,15 @@ PAGES.disp = el=>{
   el.innerHTML=`
     <div class="h"><h2 class="serif">Disponibilidad de catálogo</h2><div class="desc">Evolución de los productos disponibles en el tiempo. Filtra por marca para ver su detalle.</div></div>
     <div class="controls"><span class="lab">Marca</span><select id="f-disp"><option>Todas las marcas</option>${opts(marcas())}</select></div>
+    ${periodBar("disp")}
     <div class="card"><div class="legend" id="lg-disp"></div><div class="chart-box" style="height:380px"><canvas id="ch-disp"></canvas></div></div>`;
   const render=()=>{
-    const m=$("#f-disp").value;
-    if(m==="Todas las marcas") drawLine("ch-disp","lg-disp",serieLineas(H(),"marca","disponibles"));
-    else drawLine("ch-disp","lg-disp",serieLineas(H().filter(r=>r.marca===m),"marca","disponibles",PALETTE[0]));
+    const m=$("#f-disp").value, p=readPeriods("disp");
+    const rows=(m==="Todas las marcas")?H():H().filter(r=>r.marca===m);
+    const color=(m==="Todas las marcas")?null:PALETTE[0];
+    drawLine("ch-disp","lg-disp",serieComparada(rows,"marca","disponibles",p.main,p.comp,color));
   };
-  $("#f-disp").onchange=render; render();
+  $("#f-disp").onchange=render; wirePeriod("disp",render); render();
 };
 
 // PÁGINA 3 — Disponibilidad por categoría (línea + filtro marca + categoria/pmax)
@@ -432,6 +492,7 @@ PAGES["disp-pmax"] = el=>{
       <span class="lab">Marca</span><div class="msel"><button class="msel-btn" id="mp-btn"><span id="mp-lbl">Todas</span><span style="color:var(--faint)">▾</span></button><div class="msel-pop" id="mp-pop"></div></div>
       <span class="lab">Categoría</span><div class="msel"><button class="msel-btn" id="cat-btn"><span id="cat-lbl">Todas</span><span style="color:var(--faint)">▾</span></button><div class="msel-pop" id="cat-pop"></div></div>
     </div>
+    ${periodBar("pm")}
     <div class="card"><div class="legend" id="lg-pm"></div><div class="chart-box" style="height:380px"><canvas id="ch-pm"></canvas></div></div>`;
   const feedRows=()=>H().filter(r=>r.marca===$("#f-pm-feed").value);
   const selMP=new Set(), selCat=new Set();
@@ -463,8 +524,10 @@ PAGES["disp-pmax"] = el=>{
     let rows=feedRows();
     if(selMP.size) rows=rows.filter(r=>selMP.has(r.marca_producto));
     if(selCat.size) rows=rows.filter(r=>selCat.has(r.pmax));
-    drawLine("ch-pm","lg-pm",serieLineas(rows,"pmax","disponibles"));
+    const p=readPeriods("pm");
+    drawLine("ch-pm","lg-pm",serieComparada(rows,"pmax","disponibles",p.main,p.comp));
   };
+  wirePeriod("pm",render);
   const popToggle=(btnId,popId)=>{const b=$(btnId),p=$(popId);b.onclick=e=>{e.stopPropagation();document.querySelectorAll(".msel-pop").forEach(x=>{if(x!==p)x.classList.remove("open");});p.classList.toggle("open");};};
   popToggle("#mp-btn","#mp-pop"); popToggle("#cat-btn","#cat-pop");
   document.addEventListener("click",e=>{if(!el.querySelector(".controls").contains(e.target))el.querySelectorAll(".msel-pop").forEach(p=>p.classList.remove("open"));});
