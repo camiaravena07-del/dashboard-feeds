@@ -247,6 +247,10 @@
   .periodbar .chk{display:flex;align-items:center;gap:7px;font:500 12.5px/1 'DM Sans';color:var(--rose-d);cursor:pointer;margin-left:6px}
   .periodbar .chk input{accent-color:var(--rose);width:15px;height:15px;cursor:pointer}
   .periodbar #disp-cinfo,.periodbar #pm-cinfo{color:var(--muted);font-weight:400}
+  .periodbar input[type=date]{font-family:inherit;font-size:13px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:var(--r-s);padding:7px 10px;cursor:pointer}
+  .periodbar input[type=date]:focus{outline:none;border-color:var(--rose);box-shadow:0 0 0 3px var(--soft)}
+  .periodbar input[type=date]:disabled{opacity:.5;cursor:not-allowed}
+  .periodbar input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.6}
   .ok{padding:34px;text-align:center;color:var(--ok);font:500 15px/1.5 'DM Sans';background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:var(--r-m)}
   .legend span{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 'DM Sans';color:var(--body)}
   .loading{padding:80px;text-align:center;color:var(--muted)}
@@ -390,25 +394,29 @@ function serieComparada(rows,keyDim,metric,fsMain,fsComp,fixedColor){
 }
 // barra de controles de período + lectura
 function periodBar(pfx){
-  const fs=fechas(); const last=fs[fs.length-1]||"";
-  const o=(sel)=>fs.map(f=>`<option${f===sel?" selected":""}>${f}</option>`).join("");
+  const fs=fechas(); const lo=fs[0]||"", hi=fs[fs.length-1]||"";
+  const d=(id,val)=>`<input type="date" id="${pfx}-${id}" value="${val}" min="${lo}" max="${hi}">`;
   return `<div class="periodbar">
     <span class="lab">Período</span>
-    <select id="${pfx}-di">${o(fs[0])}</select><span class="lab">a</span><select id="${pfx}-dh">${o(last)}</select>
+    ${d("di",lo)}<span class="lab">a</span>${d("dh",hi)}
     <label class="chk"><input type="checkbox" id="${pfx}-cmp"> Comparar con</label>
-    <select id="${pfx}-ci" disabled>${o(fs[0])}</select>
+    ${d("ci",lo)}
     <span class="lab" id="${pfx}-cinfo"></span>
   </div>`;
 }
 function readPeriods(pfx){
   const fs=fechas();
-  let iA=fs.indexOf($("#"+pfx+"-di").value), jA=fs.indexOf($("#"+pfx+"-dh").value);
-  if(iA<0)iA=0; if(jA<0)jA=fs.length-1; if(jA<iA)jA=iA;
+  // de un valor de calendario (YYYY-MM-DD) al indice de la fecha con dato mas cercana (>=)
+  const idxDesde=v=>{let i=fs.findIndex(f=>f>=v); return i<0?fs.length-1:i;};
+  const idxHasta=v=>{let i=-1; for(let k=0;k<fs.length;k++){if(fs[k]<=v)i=k;} return i<0?0:i;};
+  let iA=idxDesde($("#"+pfx+"-di").value||fs[0]);
+  let jA=idxHasta($("#"+pfx+"-dh").value||fs[fs.length-1]);
+  if(jA<iA)jA=iA;
   const main=fs.slice(iA,jA+1);
   let comp=null;
   const on=$("#"+pfx+"-cmp")&&$("#"+pfx+"-cmp").checked;
   if(on){
-    let ci=fs.indexOf($("#"+pfx+"-ci").value); if(ci<0)ci=0;
+    let ci=idxDesde($("#"+pfx+"-ci").value||fs[0]);
     comp=fs.slice(ci,ci+main.length);
     if(comp.length<main.length){const s=Math.max(0,fs.length-main.length);comp=fs.slice(s,s+main.length);}
     const info=$("#"+pfx+"-cinfo"); if(info)info.textContent=comp.length?`${comp[0]} a ${comp[comp.length-1]}`:"(sin datos suficientes)";
